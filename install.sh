@@ -26,11 +26,12 @@ if [[ $input =~ ^(1| ) ]] ; then
 	if [[ $confirm =~ ^(y|Y| ) ]] ; then
 		echo "Installing LDAP Slave...."
 		echo ""
-		/bin/yum -y install gnutls-utils curl mariadb git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release python-pip perl-CPAN
-		(echo y;echo o conf prerequisites_policy follow;echo o conf commit)|cpan
-		cpan MongoDB
+		#/bin/yum -y install gnutls-utils curl mariadb git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release python-pip perl-CPAN
+		/bin/yum -y install gnutls-utils curl git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release python-pip gcc-c++ make gcc
+		#(echo y;echo o conf prerequisites_policy follow;echo o conf commit)|cpan
+		#cpan MongoDB
 		/bin/curl --silent --location https://rpm.nodesource.com/setup_8.x | sudo bash -
-		/bin/yum -y install nodejs gcc-c++ make gcc perl-Redis
+		/bin/yum -y install nodejs
 		/bin/yum upgrade -y python*
 		#pip install --upgrade pip
 		#python -m pip install python-ldap mysql-connector pymongo python-dateutil datetime timedelta
@@ -56,6 +57,14 @@ if [[ $input =~ ^(1| ) ]] ; then
 			echo "Error: null value in entry: LDAP Master IP address"
 			exit
 		fi
+
+		# Check ACL Permit Master
+		check=$(/bin/curl --silent http://$ipmaster:3000/api/v1/node)
+		if [ "$check" != "OK" ]; then
+        		echo "Error: Could not open a connection to LDAP Master: $ipmaster"
+        		exit
+		fi
+
 		read -p "Enter the LDAP Domain: " domain
 		echo ""
 		if [ -z "$domain" ] ; then
@@ -74,7 +83,6 @@ if [[ $input =~ ^(1| ) ]] ; then
 		if [ -z "$admin" ] ; then
 			admin="cn=manager"
 		fi
-
 
 		for i in $(echo $domain | tr "." "\n")
 		do
@@ -112,11 +120,13 @@ if [[ $input =~ ^(1| ) ]] ; then
 
 		if (( $(/bin/yum-config-manager | grep -v grep | grep "docker-ce" | wc -l) == 0 )) ; then
 			/bin/yum -y remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine
-			LDAP /bin/yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-			/bin/yum-config-manager --enable docker-ce-edge
+			#/bin/yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+			#/bin/yum-config-manager --enable docker-ce-edge
 		fi
 		if (( $(rpm -qa |grep "docker-ce" |grep -v grep | wc -l) == 0 )) ; then
-			/bin/yum install -y docker-ce
+			#/bin/yum install -y docker-ce
+			rpm -ivh ./Packages/docker-ce-18.09.6-3.el7.x86_64.rpm
+			rpm -ivh ./Packages/docker-ce-cli-18.09.6-3.el7.x86_64.rpm
 			/bin/pip install docker-compose
 			systemctl start docker
 			systemctl enable docker
@@ -138,6 +148,11 @@ if [[ $input =~ ^(1| ) ]] ; then
 		fi
 		
 		ckSlpad=$(/bin/curl --silent http://$ipslave:3000/api/v1/dir/install/$domain/$adminpass/$ipslave/$desc/3/$ipmaster/admin)
-		echo $ckSlpad
+		#echo $ckSlpad
+
+		if [ $ckSlpad == "ok" ] ; then
+			updateDB=$(/bin/curl --silent http://$ipmaster:3000/api/v1/dir/install/$domain/$adminpass/$ipslave/$desc/3/admin)
+			echo $updateDB
+		fi
 	fi
 fi
