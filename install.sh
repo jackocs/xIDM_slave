@@ -16,6 +16,7 @@ chLDAPMATER() {
 	pass=$4
 
 	#echo "$ip : $basedn : $admin : $pass"
+	yum -y install openldap-clients
 	chLDAP=$(/bin/ldapsearch -LLL -o nettimeout=3 -x -h $ip -b "$basedn" -D "$admin,$basedn" -w $pass uid=admin dn |grep "dn" |wc -l |tr -d "\n\r")
 	#echo $chLDAP
 }
