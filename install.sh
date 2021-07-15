@@ -16,7 +16,7 @@ chLDAPMATER() {
 	pass=$4
 
 	#echo "$ip : $basedn : $admin : $pass"
-	yum -y install openldap-clients
+	echo "$ip : $basedn : $admin"
 	chLDAP=$(/bin/ldapsearch -LLL -o nettimeout=3 -x -h $ip -b "$basedn" -D "$admin,$basedn" -w $pass uid=admin dn |grep "dn" |wc -l |tr -d "\n\r")
 	#echo $chLDAP
 }
@@ -28,14 +28,17 @@ if [[ $input =~ ^(1| ) ]] ; then
 		echo "Installing LDAP Slave...."
 		echo ""
 		#/bin/yum -y install gnutls-utils curl mariadb git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release python-pip perl-CPAN
-		/bin/yum -y install gnutls-utils curl git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release python-pip gcc-c++ make gcc
+		/bin/yum -y install gnutls-utils curl git openldap-* perl-LDAP perl-Time-Piece perl-Switch.noarch perl-Switch perl-DateTime perl-DB_File perl-DBI perl-DBD-MySQL epel-release gcc-c++ make gcc openldap-clients yum-utils python3 python3-pip python3-devel libevent-devel openssl-devel libffi-devel
 		#(echo y;echo o conf prerequisites_policy follow;echo o conf commit)|cpan
 		#cpan MongoDB
 		/bin/curl --silent --location https://rpm.nodesource.com/setup_8.x | sudo bash -
 		/bin/yum -y install nodejs
 		/bin/yum upgrade -y python*
 		#pip install --upgrade pip
-		#python -m pip install python-ldap mysql-connector pymongo python-dateutil datetime timedelta
+		python3 -m pip install -U pip
+		python3 -m pip install -U setuptools
+		python3 -m pip install -U docker-compose
+		python3 -m pip install -U python-ldap mysql-connector pymongo python-dateutil datetime timedelta
 		if [ ! -d "/home/restful_node_slave" ]; then
 			/bin/cd /home/
 			/bin/git clone https://github.com/jackocs/restful_node_slave.git /home/restful_node_slave
@@ -62,7 +65,7 @@ if [[ $input =~ ^(1| ) ]] ; then
 		# Check ACL Permit Master
 		check=$(/bin/curl --silent http://$ipmaster:3000/api/v1/node)
 		if [ "$check" != "OK" ]; then
-        		echo "Error: Could not open a connection to LDAP Master: $ipmaster"
+        		echo "Error: Could not open a connection to LDAP Master: $ipmaster or Unauthorized"
         		exit
 		fi
 
@@ -119,16 +122,18 @@ if [[ $input =~ ^(1| ) ]] ; then
 		fi
 		#echo $chLDAP
 
+		echo "Install Docker Engine on CentOS"
 		if (( $(/bin/yum-config-manager | grep -v grep | grep "docker-ce" | wc -l) == 0 )) ; then
 			/bin/yum -y remove docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine
-			#/bin/yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+			/bin/yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+			/bin/yum-config-manager --enable docker-ce-nightly
 			#/bin/yum-config-manager --enable docker-ce-edge
 		fi
 		if (( $(rpm -qa |grep "docker-ce" |grep -v grep | wc -l) == 0 )) ; then
-			#/bin/yum install -y docker-ce
-			rpm -ivh ./Packages/docker-ce-18.09.6-3.el7.x86_64.rpm
-			rpm -ivh ./Packages/docker-ce-cli-18.09.6-3.el7.x86_64.rpm
-			/bin/pip install docker-compose
+			/bin/yum install -y docker-ce docker-ce-cli containerd.io
+			#rpm -ivh ./Packages/docker-ce-18.09.6-3.el7.x86_64.rpm
+			#rpm -ivh ./Packages/docker-ce-cli-18.09.6-3.el7.x86_64.rpm
+			#python3 -m pip install docker-compose
 			systemctl start docker
 			systemctl enable docker
 		fi
@@ -137,7 +142,13 @@ if [[ $input =~ ^(1| ) ]] ; then
 			systemctl start docker
 			systemctl enable docker
 		fi
-		
+
+		# Check Docker runing
+		if (( $(ps -ef | grep -v grep | grep "docker" | wc -l) == 0 )) ; then
+			echo "Error: Docker Container is not running."
+			exit
+                fi
+
 		#/bin/yum install -y https://centos7.iuscommunity.org/ius-release.rpm
 		#/bin/yum install -y python36u python36u-libs python36u-devel python36u-pip
 		#pip3.6 install --upgrade pip
@@ -154,6 +165,8 @@ if [[ $input =~ ^(1| ) ]] ; then
 		if [ $ckSlpad == "ok" ] ; then
 			updateDB=$(/bin/curl --silent http://$ipmaster:3000/api/v1/dir/install/$domain/$adminpass/$ipslave/$desc/3/admin)
 			echo $updateDB
+		else
+			echo "Error: NodeJS Unauthorized"
 		fi
 	fi
 fi
